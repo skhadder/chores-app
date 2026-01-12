@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { db } from "@/lib/firebase";
-import { doc, setDoc, collection, getDocs, writeBatch, getDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs, writeBatch, getDoc } from "firebase/firestore";
 
 const HOUSE_ID = "house_alpha_phi_test";
 
@@ -59,10 +59,8 @@ function getWeekId(d = new Date()) {
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
   const ss = String(d.getSeconds()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}_${hh}${min}${ss}`; // e.g. 2026-01-10_142530
+  return `${yyyy}-${mm}-${dd}_${hh}${min}${ss}`;
 }
-
-
 export default function AdminPage() {
   const [status, setStatus] = useState("");
   const [generatedText, setGeneratedText] = useState("");
@@ -111,6 +109,8 @@ export default function AdminPage() {
           batch.set(doc(db, "houses", HOUSE_ID, "members", memberId), {
             name: fullName,
             roomId,
+            assignmentCount: 0,
+            deficit: 0,
             createdAt: Date.now(),
           });
         }
@@ -150,12 +150,14 @@ export default function AdminPage() {
       return;
     }
 
-    // Load chores + rooms
+    // Load chores + rooms + members
     const choresSnap = await getDocs(collection(db, "houses", HOUSE_ID, "chores"));
     const roomsSnap = await getDocs(collection(db, "houses", HOUSE_ID, "rooms"));
+    const membersSnap = await getDocs(collection(db, "houses", HOUSE_ID, "members"));
 
     const chores = choresSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
     const rooms = roomsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+    const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
     if (chores.length !== 12) {
       setStatus(`❌ Expected 12 chores, found ${chores.length}.`);
@@ -172,19 +174,50 @@ export default function AdminPage() {
       setStatus("❌ Total occupancy is 0. Check room docs.");
       return;
     }
+    if (members.length !== totalOccupancy) {
+      setStatus(`❌ Member count (${members.length}) doesn't match total occupancy (${totalOccupancy}).`);
+      return;
+    }
 
     // Get last week's assignments to enforce "no consecutive"
-    // MVP approach: look up the most recent week doc (not perfect, but good enough)
-    // We'll simply find any assignments with weekId != current and take the latest later if needed.
-    // For now: enforce no consecutive only if you generated last time using a recent date id.
-    // (We can improve to true calendar weeks after MVP.)
     const assignmentsSnap = await getDocs(collection(db, "houses", HOUSE_ID, "assignments"));
     const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
+    // Calculate total assignments made so far (for member deficit calculation)
+    const totalAssignmentsSoFar = assignments.filter(a => a.weekId && a.weekId !== weekId).length;
+    
+    // Initialize member deficit map and update member objects
+    const memberDataMap = new Map<string, any>();
+    for (const m of members) {
+      const assignmentCount = m.assignmentCount || 0;
+      // Each member should have done: (totalAssignmentsSoFar / totalOccupancy) chores
+      // Deficit = expected - actual
+      const expectedAssignments = totalAssignmentsSoFar / totalOccupancy;
+      const deficit = expectedAssignments - assignmentCount;
+      memberDataMap.set(m.id, {
+        ...m,
+        assignmentCount,
+        deficit,
+        roomId: m.roomId,
+      });
+    }
+
     const lastWeekAssignments = new Map<string, string>(); // roomId -> userId
+// Group assignments by weekId and find the most recent week
+    const assignmentsByWeek = new Map<string, typeof assignments>();
     for (const a of assignments) {
       if (a.weekId && a.weekId !== weekId) {
-        // last write wins (works fine for MVP if you generate weeks in order)
+        if (!assignmentsByWeek.has(a.weekId)) {
+          assignmentsByWeek.set(a.weekId, []);
+        }
+        assignmentsByWeek.get(a.weekId)!.push(a);
+      }
+    }
+    // Get the most recent weekId (since it's timestamp-based, lexicographic sort works)
+    const weekIds = Array.from(assignmentsByWeek.keys()).sort().reverse();
+    if (weekIds.length > 0) {
+      const mostRecentWeekId = weekIds[0];
+      for (const a of assignmentsByWeek.get(mostRecentWeekId) || []) {
         lastWeekAssignments.set(a.roomId, a.userId);
       }
     }
@@ -199,15 +232,21 @@ export default function AdminPage() {
       r._slots = 0;
     }
 
-    // Allocate 12 slots
+    // Allocate 12 slots (optimized: find max deficit each iteration instead of sorting)
     for (let i = 0; i < chores.length; i++) {
-      rooms.sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
-      rooms[0]._slots += 1;
-      rooms[0].deficit -= 1;
+      // Find room with maximum deficit
+      let maxDeficitIdx = 0;
+      for (let j = 1; j < rooms.length; j++) {
+        if ((rooms[j].deficit || 0) > (rooms[maxDeficitIdx].deficit || 0)) {
+          maxDeficitIdx = j;
+        }
+      }
+      rooms[maxDeficitIdx]._slots = (rooms[maxDeficitIdx]._slots || 0) + 1;
+      rooms[maxDeficitIdx].deficit = (rooms[maxDeficitIdx].deficit || 0) - 1;
     }
 
     // ---------
-    // 2) Pick members within each room (rotation + no consecutive + no double in same week)
+    // 2) Pick members using member-level deficit (fairness across all 51 members)
     // ---------
     const usedThisWeek = new Set<string>(); // userIds already assigned this week
     const plannedAssignments: Array<{ choreId: string; roomId: string; userId: string }> = [];
@@ -217,6 +256,7 @@ export default function AdminPage() {
 
     let choreIndex = 0;
 
+    // Process rooms that got slots
     for (const r of rooms) {
       const slots = r._slots || 0;
       if (slots === 0) continue;
@@ -227,44 +267,62 @@ export default function AdminPage() {
         return;
       }
 
-      let pointer: number = r.rotationPointer || 0;
+      // Get members in this room
+      const roomMembers = Array.from(memberDataMap.values()).filter(m => m.roomId === r.id);
+      if (roomMembers.length === 0) {
+        setStatus(`❌ ${r.name} has no members.`);
+        return;
+      }
+
+      const lastUser = lastWeekAssignments.get(r.id);
 
       for (let s = 0; s < slots; s++) {
-        const lastUser = lastWeekAssignments.get(r.id);
+        // Find eligible members from this room, sorted by deficit (highest first)
+        const eligibleMembers = roomMembers
+          .filter(m => {
+            // Relax constraints for fairness:
+            // - If room has only 1 member, allow consecutive (fairness > constraint)
+            // - Otherwise, respect no consecutive and no double assignment
+            if (roomMembers.length === 1) {
+              return !usedThisWeek.has(m.id); // Only check no double assignment
+            }
+            // For multi-member rooms, respect both constraints
+            if (m.id === lastUser) return false; // no consecutive weeks
+            if (usedThisWeek.has(m.id)) return false; // no double assignment same week
+            return true;
+          })
+          .sort((a, b) => (b.deficit || 0) - (a.deficit || 0)); // Highest deficit first
 
-        // find next eligible member
-        let tries = 0;
-        let chosenUser = "";
-
-        while (tries < rotationOrder.length) {
-          const candidate = rotationOrder[pointer % rotationOrder.length];
-          pointer = (pointer + 1) % rotationOrder.length;
-          tries++;
-
-          if (candidate === lastUser) continue;           // no consecutive weeks
-          if (usedThisWeek.has(candidate)) continue;      // no double assignment same week
-
-          chosenUser = candidate;
-          break;
+        // If no eligible members with constraints, relax constraints for fairness
+        let chosenMember = eligibleMembers[0];
+        
+        if (!chosenMember) {
+          // Relax constraints: allow consecutive if needed for fairness
+          const relaxedEligible = roomMembers
+            .filter(m => !usedThisWeek.has(m.id)) // Only check no double assignment
+            .sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
+          
+          chosenMember = relaxedEligible[0];
         }
 
-        if (!chosenUser) {
-          setStatus(`❌ Could not find eligible member in ${r.name}. (Likely too small + constraints.)`);
+        if (!chosenMember) {
+          setStatus(`❌ Could not find eligible member in ${r.name} even with relaxed constraints.`);
           return;
         }
 
-        usedThisWeek.add(chosenUser);
+        usedThisWeek.add(chosenMember.id);
+        
+        // Update member's deficit for this week's calculation
+        chosenMember.deficit = (chosenMember.deficit || 0) - 1;
+        chosenMember._assignmentCount = (chosenMember._assignmentCount || chosenMember.assignmentCount || 0) + 1;
 
         const chore = shuffledChores[choreIndex++];
         plannedAssignments.push({
           choreId: chore.id,
           roomId: r.id,
-          userId: chosenUser,
+          userId: chosenMember.id,
         });
       }
-
-      // Save updated pointer back to the room
-      r._newPointer = pointer;
     }
 
     if (plannedAssignments.length !== 12) {
@@ -295,13 +353,33 @@ export default function AdminPage() {
       });
     });
 
-    // Update rooms with new deficit + pointer
+    // Update rooms with new deficit
     for (const r of rooms) {
       batch.set(
         doc(db, "houses", HOUSE_ID, "rooms", r.id),
-        { deficit: r.deficit || 0, rotationPointer: r._newPointer ?? r.rotationPointer ?? 0 },
+        { deficit: r.deficit || 0 },
         { merge: true }
       );
+    }
+
+    // Update members with new assignment counts and deficits
+    for (const m of members) {
+      const updatedMember = memberDataMap.get(m.id);
+      if (updatedMember && updatedMember._assignmentCount !== undefined) {
+        // Calculate new deficit: expected assignments after this week - actual
+        const newTotalAssignments = totalAssignmentsSoFar + plannedAssignments.length;
+        const expectedAssignments = newTotalAssignments / totalOccupancy;
+        const newDeficit = expectedAssignments - updatedMember._assignmentCount;
+        
+        batch.set(
+          doc(db, "houses", HOUSE_ID, "members", m.id),
+          { 
+            assignmentCount: updatedMember._assignmentCount,
+            deficit: newDeficit,
+          },
+          { merge: true }
+        );
+      }
     }
 
     await batch.commit();
@@ -327,10 +405,6 @@ export default function AdminPage() {
     console.error(err);
     setStatus("❌ Error generating week. Check console.");
   }
-
-  
-
-
 };
 
   return (
