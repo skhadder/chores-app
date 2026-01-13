@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, where, query, doc, getDoc, writeBatch } from "firebase/firestore";
 import { AlphaPhiLogo } from "@/components/alpha-phi-logo";
 
-const HOUSE_ID = "house_alpha_phi_test";
+import { HOUSE_ID, ENVIRONMENT } from "@/lib/config";
 
 function getWeekId(d = new Date()) {
   const yyyy = d.getFullYear();
@@ -499,6 +499,17 @@ export default function DirectorPage() {
           </nav>
         </div>
       </header>
+
+      {/*Environment Indicator*/}
+      {ENVIRONMENT === "demo" && (
+        <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded text-center">
+            <p className="text-xs text-blue-700">
+            🧪 Demo Environment - Using test data
+            </p>
+        </div>
+        )}
+
+      
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12 flex-1">
