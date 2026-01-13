@@ -5,7 +5,7 @@ import { useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, collection, getDocs, writeBatch, getDoc } from "firebase/firestore";
 
-const HOUSE_ID = "house_alpha_phi_test";
+import { HOUSE_ID, ENVIRONMENT } from "@/lib/config";
 
 const CHORES = [
   { id: "chore_01", name: "Clean up living room, chapter room, date room, take out outside trash in courtyard" },
