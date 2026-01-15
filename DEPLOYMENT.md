@@ -102,6 +102,36 @@ NEXT_PUBLIC_ENVIRONMENT=production
 **Problem**: Build fails
 - **Solution**: Check all Firebase environment variables are set correctly
 
+**Problem**: 404 NOT_FOUND error after deployment (works locally but not on Vercel)
+- **Root Cause**: Firebase environment variables are missing or not available at runtime
+- **Solutions**:
+  1. **Verify Environment Variable Scope**: 
+     - Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+     - For Production deployments, ensure ALL variables are set for **"Production"** environment
+     - Don't just set them for "Preview" - Production deployments need Production-scoped variables
+  2. **Check Variable Names**:
+     - Variable names must be EXACT (case-sensitive, no typos)
+     - Required: `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`
+  3. **Verify Values**:
+     - Copy values directly from Firebase Console → Project Settings → Your apps
+     - No extra spaces, quotes, or special characters
+     - `NEXT_PUBLIC_FIREBASE_PROJECT_ID` must match your actual Firebase project ID
+  4. **Redeploy After Changes**:
+     - After adding/updating environment variables, you MUST redeploy
+     - Go to Deployments tab → Click "..." on latest deployment → "Redeploy"
+     - Or trigger a new deployment by pushing to your connected branch
+  5. **Use Test Page**:
+     - Visit `/test` on your deployed site to see which variables are missing
+     - The test page will show detailed diagnostics
+  6. **Check Build Logs**:
+     - Look for warnings about missing Firebase variables in build logs
+     - If you see warnings, the variables aren't available during build
+  7. **Common Mistakes**:
+     - ✅ Setting variables for "Preview" but deploying to "Production"
+     - ✅ Typos in variable names (e.g., `FIREBASE_API_KEY` instead of `NEXT_PUBLIC_FIREBASE_API_KEY`)
+     - ✅ Using wrong Firebase project ID
+     - ✅ Forgetting to redeploy after adding variables
+
 ## Firebase Security Rules
 
 Consider adding Firestore security rules to prevent accidental cross-contamination:
