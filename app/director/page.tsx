@@ -500,19 +500,16 @@ export default function DirectorPage() {
         </div>
       </header>
 
-      {/*Environment Indicator*/}
-      {ENVIRONMENT === "demo" && (
-        <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded text-center">
-            <p className="text-xs text-blue-700">
-            🧪 Demo Environment - Using test data
-            </p>
-        </div>
-        )}
-
-      
-
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12 flex-1">
+        {/* Environment Indicator */}
+        {ENVIRONMENT === "demo" && (
+          <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center max-w-4xl mx-auto">
+            <p className="text-sm text-blue-700 font-medium">
+            Demo Environment - Using test data
+            </p>
+          </div>
+        )}
         {/* Hero Section with Generate Button */}
         <div className="flex flex-col items-center justify-center text-center mb-16">
           <div className="mb-8">
