@@ -144,7 +144,7 @@ houses/
 
 | Variable | Demo Value | Production Value | Description |
 |----------|------------|------------------|-------------|
-| `NEXT_PUBLIC_HOUSE_ID` | `house_alpha_phi_test` | `house_alpha_phi` | Determines which Firebase data to use |
+| `NEXT_PUBLIC_HOUSE_ID` | `house_alpha_phi_test` | xxx | Determines which Firebase data to use |
 | `NEXT_PUBLIC_ENVIRONMENT` | `demo` | `production` | Environment label (shown in UI) |
 | `NEXT_PUBLIC_FIREBASE_*` | Same for both | Same for both | Firebase configuration (same project) |
 
