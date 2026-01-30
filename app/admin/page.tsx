@@ -8,38 +8,37 @@ import { doc, setDoc, collection, getDocs, writeBatch, getDoc } from "firebase/f
 import { HOUSE_ID, ENVIRONMENT } from "@/lib/config";
 
 const CHORES = [
-  { id: "chore_01", name: "Clean up living room, chapter room, date room, take out outside trash in courtyard" },
-  { id: "chore_02", name: "Empty blue girl bathroom trash by 8 girl, check on toilet paper, restock paper towels" },
+  { id: "chore_01", name: "Clean up Teacup room, Chapter Room, Date Room and take out Courtyard trash" },
+  { id: "chore_02", name: "Empty Blue Girl Bathroom trash by 8 girl, check on toilet paper, and restock paper towels" },
   { id: "chore_03", name: "Clean fridges and take out mini kitchen trash" },
-  { id: "chore_04", name: "Empty ONE dining room trash #1" },
-  { id: "chore_05", name: "Empty ONE dining room trash #2" },
-  { id: "chore_06", name: "Empty ONE dining room trash #3" },
-  { id: "chore_07", name: "Empty ONE dining room trash #4" },
-  { id: "chore_08", name: "Empty single girl bathroom trash, check on toilet paper, restock paper towels" },
-  { id: "chore_09", name: "Do the mini kitchen dishes & put away" },
-  { id: "chore_10", name: "Empty pink girl bathroom trash, check on toilet paper, restock paper towels" },
-  { id: "chore_11", name: "Clean study room & take out trash by 8 girl" },
-  { id: "chore_12", name: "Empty yellow girl bathroom trash, check on toilet paper, restock paper towels" },
+  { id: "chore_04", name: "Empty TWO dining room trashes #1" },
+  { id: "chore_05", name: "Empty TWO dining room trashes #2" },
+  { id: "chore_06", name: "Empty Single Girl bathroom trash, check on toilet paper, and restock paper towels" },
+  { id: "chore_07", name: "Empty Pink Girl bathroom trash, check on toilet paper, and restock paper towels" },
+  { id: "chore_08", name: "Clean Study Room and take out trash by 8 girl" },
+  { id: "chore_09", name: "Empty Yellow Girl bathroom trash, check on toilet paper, and restock paper towels" },
+  { id: "chore_10", name: "Sort mail" },
+  { id: "chore_11", name: "Wipe down tables in dining room" },
 ];
 
 const ROOMS_DATA = [
-  { num: 1, capacity: 2, members: ["Sammy S", "Isabella L"] },
+  { num: 1, capacity: 2, members: [] }, // Seniors removed: Sammy S, Isabella L
   { num: 2, capacity: 2, members: ["Katia A", "Sofia C"] },
   { num: 3, capacity: 4, members: ["Ainsley P", "Chandhana P", "Alyssa G", "Amelia N"] },
   { num: 4, capacity: 4, members: ["Summer L", "Kat G", "Terra K", "Olivia R"] },
-  { num: 5, capacity: 1, members: ["Penelope S"] },
+  { num: 5, capacity: 1, members: [] }, // Senior removed: Penelope S
   { num: 6, capacity: 2, members: ["Fran S", "Kaitlyn N"] },
-  { num: 7, capacity: 2, members: ["Isabella P", "Annika S"] },
+  { num: 7, capacity: 2, members: ["Isabella P"] }, // Senior removed: Annika S
   { num: 8, capacity: 1, members: ["Julissa P"] },
   { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Laura M"] },
   { num: 10, capacity: 4, members: ["Keira S", "Ava C", "Avary S", "Cadence R"] },
-  { num: 11, capacity: 4, members: ["Summer B", "Sam L", "Sarah K", "Ariana M"] },
-  { num: 12, capacity: 2, members: ["Grace C", "Lauren L"] },
-  { num: 13, capacity: 2, members: ["Isabel W", "Julia P"] },
+  { num: 11, capacity: 4, members: ["Summer B", "Sarah K", "Ariana M"] }, // Senior removed: Sam L
+  { num: 12, capacity: 2, members: [] }, // Seniors removed: Grace C, Lauren L
+  { num: 13, capacity: 2, members: [] }, // Seniors removed: Isabel W, Julia P
   { num: 14, capacity: 2, members: ["Mia H", "Cami K"] },
   { num: 15, capacity: 2, members: ["Brooke G", "Eve O"] },
   { num: 16, capacity: 2, members: ["Isabella A", "Hannah M"] },
-  { num: 17, capacity: 2, members: ["Lindsay G", "Olivia G"] },
+  { num: 17, capacity: 2, members: [] }, // Seniors removed: Lindsay G, Olivia G
   { num: 18, capacity: 8, members: ["Mikayla P", "Zoe Q", "Isela V", "Sanaa K", "Saavya S", "Josie Z", "Katie W", "Carina D"] },
 ];
 
@@ -159,8 +158,8 @@ export default function AdminPage() {
     const rooms = roomsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
     const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
-    if (chores.length !== 12) {
-      setStatus(`❌ Expected 12 chores, found ${chores.length}.`);
+    if (chores.length !== 11) {
+      setStatus(`❌ Expected 11 chores, found ${chores.length}.`);
       return;
     }
     if (rooms.length !== 18) {
@@ -202,8 +201,9 @@ export default function AdminPage() {
       });
     }
 
-    const lastWeekAssignments = new Map<string, string>(); // roomId -> userId
-// Group assignments by weekId and find the most recent week
+    // Get last week's assignments to enforce "no consecutive" (member-based, not room-based)
+    const lastWeekMemberAssignments = new Set<string>(); // userIds assigned last week
+    // Group assignments by weekId and find the most recent week
     const assignmentsByWeek = new Map<string, typeof assignments>();
     for (const a of assignments) {
       if (a.weekId && a.weekId !== weekId) {
@@ -218,35 +218,12 @@ export default function AdminPage() {
     if (weekIds.length > 0) {
       const mostRecentWeekId = weekIds[0];
       for (const a of assignmentsByWeek.get(mostRecentWeekId) || []) {
-        lastWeekAssignments.set(a.roomId, a.userId);
+        lastWeekMemberAssignments.add(a.userId);
       }
     }
 
     // ---------
-    // 1) Choose which rooms get the 12 chore slots (weighted fairness via deficit)
-    // ---------
-    // Update each room's deficit by its share
-    for (const r of rooms) {
-      const share = ((r.occupancy || 0) / totalOccupancy) * chores.length;
-      r.deficit = (r.deficit || 0) + share;
-      r._slots = 0;
-    }
-
-    // Allocate 12 slots (optimized: find max deficit each iteration instead of sorting)
-    for (let i = 0; i < chores.length; i++) {
-      // Find room with maximum deficit
-      let maxDeficitIdx = 0;
-      for (let j = 1; j < rooms.length; j++) {
-        if ((rooms[j].deficit || 0) > (rooms[maxDeficitIdx].deficit || 0)) {
-          maxDeficitIdx = j;
-        }
-      }
-      rooms[maxDeficitIdx]._slots = (rooms[maxDeficitIdx]._slots || 0) + 1;
-      rooms[maxDeficitIdx].deficit = (rooms[maxDeficitIdx].deficit || 0) - 1;
-    }
-
-    // ---------
-    // 2) Pick members using member-level deficit (fairness across all 51 members)
+    // Allocate chores directly to members using member-level deficit (pure member-level fairness)
     // ---------
     const usedThisWeek = new Set<string>(); // userIds already assigned this week
     const plannedAssignments: Array<{ choreId: string; roomId: string; userId: string }> = [];
@@ -254,91 +231,75 @@ export default function AdminPage() {
     // Shuffle chores so the same chore doesn't always go first
     const shuffledChores = [...chores].sort(() => Math.random() - 0.5);
 
-    let choreIndex = 0;
+    // Get all members as an array for processing
+    const allMembers = Array.from(memberDataMap.values());
 
-    // Process rooms that got slots
-    for (const r of rooms) {
-      const slots = r._slots || 0;
-      if (slots === 0) continue;
-
-      const rotationOrder: string[] = r.rotationOrder || [];
-      if (!rotationOrder.length) {
-        setStatus(`❌ ${r.name} has no rotationOrder. Seed members again or fix room doc.`);
-        return;
-      }
-
-      // Get members in this room
-      const roomMembers = Array.from(memberDataMap.values()).filter(m => m.roomId === r.id);
-      if (roomMembers.length === 0) {
-        setStatus(`❌ ${r.name} has no members.`);
-        return;
-      }
-
-      const lastUser = lastWeekAssignments.get(r.id);
-
-      for (let s = 0; s < slots; s++) {
-        // Find eligible members from this room, sorted by deficit (highest first)
-        const eligibleMembers = roomMembers
-          .filter(m => {
-            // Relax constraints for fairness:
-            // - If room has only 1 member, allow consecutive (fairness > constraint)
-            // - Otherwise, respect no consecutive and no double assignment
-            if (roomMembers.length === 1) {
-              return !usedThisWeek.has(m.id); // Only check no double assignment
-            }
-            // For multi-member rooms, respect both constraints
-            if (m.id === lastUser) return false; // no consecutive weeks
-            if (usedThisWeek.has(m.id)) return false; // no double assignment same week
-            return true;
-          })
-          .sort((a, b) => (b.deficit || 0) - (a.deficit || 0)); // Highest deficit first
-
-        // If no eligible members with constraints, relax constraints for fairness
-        let chosenMember = eligibleMembers[0];
-        
-        if (!chosenMember) {
-          // Relax constraints: allow consecutive if needed for fairness
-          const relaxedEligible = roomMembers
-            .filter(m => !usedThisWeek.has(m.id)) // Only check no double assignment
-            .sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
+    // Allocate each chore to the member with highest deficit
+    for (let i = 0; i < chores.length; i++) {
+      // Find eligible members (not used this week, not assigned last week if possible)
+      const eligibleMembers = allMembers
+        .filter(m => {
+          if (usedThisWeek.has(m.id)) return false; // no double assignment same week
+          return true;
+        })
+        .sort((a, b) => {
+          // Sort by deficit (highest first), but prioritize members who weren't assigned last week
+          const aWasLastWeek = lastWeekMemberAssignments.has(a.id);
+          const bWasLastWeek = lastWeekMemberAssignments.has(b.id);
           
-          chosenMember = relaxedEligible[0];
-        }
-
-        if (!chosenMember) {
-          setStatus(`❌ Could not find eligible member in ${r.name} even with relaxed constraints.`);
-          return;
-        }
-
-        usedThisWeek.add(chosenMember.id);
-        
-        // Update member's deficit for this week's calculation
-        chosenMember.deficit = (chosenMember.deficit || 0) - 1;
-        chosenMember._assignmentCount = (chosenMember._assignmentCount || chosenMember.assignmentCount || 0) + 1;
-
-        const chore = shuffledChores[choreIndex++];
-        plannedAssignments.push({
-          choreId: chore.id,
-          roomId: r.id,
-          userId: chosenMember.id,
+          // If one was assigned last week and the other wasn't, prefer the one who wasn't
+          if (aWasLastWeek && !bWasLastWeek) return 1;
+          if (!aWasLastWeek && bWasLastWeek) return -1;
+          
+          // Otherwise, sort by deficit (highest first)
+          return (b.deficit || 0) - (a.deficit || 0);
         });
+
+      // If no eligible members (shouldn't happen), try relaxing the "no consecutive" constraint
+      let chosenMember = eligibleMembers[0];
+      
+      if (!chosenMember) {
+        // Relax constraints: allow consecutive if needed for fairness
+        const relaxedEligible = allMembers
+          .filter(m => !usedThisWeek.has(m.id)) // Only check no double assignment
+          .sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
+        
+        chosenMember = relaxedEligible[0];
       }
+
+      if (!chosenMember) {
+        setStatus(`❌ Could not find eligible member even with relaxed constraints.`);
+        return;
+      }
+
+      usedThisWeek.add(chosenMember.id);
+      
+      // Update member's deficit for this week's calculation
+      chosenMember.deficit = (chosenMember.deficit || 0) - 1;
+      chosenMember._assignmentCount = (chosenMember._assignmentCount || chosenMember.assignmentCount || 0) + 1;
+
+      const chore = shuffledChores[i];
+      plannedAssignments.push({
+        choreId: chore.id,
+        roomId: chosenMember.roomId, // Keep roomId for display/tracking
+        userId: chosenMember.id,
+      });
     }
 
-    if (plannedAssignments.length !== 12) {
-      setStatus(`❌ Expected 12 assignments, generated ${plannedAssignments.length}.`);
+    if (plannedAssignments.length !== 11) {
+      setStatus(`❌ Expected 11 assignments, generated ${plannedAssignments.length}.`);
       return;
     }
 
     // ---------
-    // 3) Write to Firestore (week + assignments + update room deficits/pointers)
+    // 3) Write to Firestore (week + assignments + update member deficits)
     // ---------
     const batch = writeBatch(db);
 
     batch.set(weekRef, {
       weekId,
       createdAt: Date.now(),
-      totalChores: 12,
+      totalChores: 11,
     });
 
     plannedAssignments.forEach((a, idx) => {
@@ -352,15 +313,6 @@ export default function AdminPage() {
         createdAt: Date.now(),
       });
     });
-
-    // Update rooms with new deficit
-    for (const r of rooms) {
-      batch.set(
-        doc(db, "houses", HOUSE_ID, "rooms", r.id),
-        { deficit: r.deficit || 0 },
-        { merge: true }
-      );
-    }
 
     // Update members with new assignment counts and deficits
     for (const m of members) {

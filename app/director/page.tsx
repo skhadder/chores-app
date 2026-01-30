@@ -89,8 +89,8 @@ export default function DirectorPage() {
       const rooms = roomsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
       const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
-      if (chores.length !== 12) {
-        setStatus(`❌ Expected 12 chores, found ${chores.length}.`);
+      if (chores.length !== 11) {
+        setStatus(`❌ Expected 11 chores, found ${chores.length}.`);
         setLoading(false);
         return;
       }
@@ -136,7 +136,8 @@ export default function DirectorPage() {
         });
       }
 
-      const lastWeekAssignments = new Map<string, string>(); // roomId -> userId
+      // Get last week's assignments to enforce "no consecutive" (member-based, not room-based)
+      const lastWeekMemberAssignments = new Set<string>(); // userIds assigned last week
       // Group assignments by weekId and find the most recent week
       const assignmentsByWeek = new Map<string, typeof assignments>();
       for (const a of assignments) {
@@ -152,35 +153,12 @@ export default function DirectorPage() {
       if (weekIds.length > 0) {
         const mostRecentWeekId = weekIds[0];
         for (const a of assignmentsByWeek.get(mostRecentWeekId) || []) {
-          lastWeekAssignments.set(a.roomId, a.userId);
+          lastWeekMemberAssignments.add(a.userId);
         }
       }
 
       // ---------
-      // 1) Choose which rooms get the 12 chore slots (weighted fairness via deficit)
-      // ---------
-      // Update each room's deficit by its share
-      for (const r of rooms) {
-        const share = ((r.occupancy || 0) / totalOccupancy) * chores.length;
-        r.deficit = (r.deficit || 0) + share;
-        r._slots = 0;
-      }
-
-      // Allocate 12 slots (optimized: find max deficit each iteration instead of sorting)
-      for (let i = 0; i < chores.length; i++) {
-        // Find room with maximum deficit
-        let maxDeficitIdx = 0;
-        for (let j = 1; j < rooms.length; j++) {
-          if ((rooms[j].deficit || 0) > (rooms[maxDeficitIdx].deficit || 0)) {
-            maxDeficitIdx = j;
-          }
-        }
-        rooms[maxDeficitIdx]._slots = (rooms[maxDeficitIdx]._slots || 0) + 1;
-        rooms[maxDeficitIdx].deficit = (rooms[maxDeficitIdx].deficit || 0) - 1;
-      }
-
-      // ---------
-      // 2) Pick members using member-level deficit (fairness across all 51 members)
+      // Allocate chores directly to members using member-level deficit (pure member-level fairness)
       // ---------
       const usedThisWeek = new Set<string>(); // userIds already assigned this week
       const plannedAssignments: Array<{ choreId: string; roomId: string; userId: string }> = [];
@@ -188,95 +166,77 @@ export default function DirectorPage() {
       // Shuffle chores so the same chore doesn't always go first
       const shuffledChores = [...chores].sort(() => Math.random() - 0.5);
 
-      let choreIndex = 0;
+      // Get all members as an array for processing
+      const allMembers = Array.from(memberDataMap.values());
 
-      // Process rooms that got slots
-      for (const r of rooms) {
-        const slots = r._slots || 0;
-        if (slots === 0) continue;
-
-        const rotationOrder: string[] = r.rotationOrder || [];
-        if (!rotationOrder.length) {
-          setStatus(`❌ ${r.name} has no rotationOrder. Seed members again or fix room doc.`);
-          setLoading(false);
-          return;
-        }
-
-        // Get members in this room
-        const roomMembers = Array.from(memberDataMap.values()).filter((m) => m.roomId === r.id);
-        if (roomMembers.length === 0) {
-          setStatus(`❌ ${r.name} has no members.`);
-          setLoading(false);
-          return;
-        }
-
-        const lastUser = lastWeekAssignments.get(r.id);
-
-        for (let s = 0; s < slots; s++) {
-          // Find eligible members from this room, sorted by deficit (highest first)
-          const eligibleMembers = roomMembers
-            .filter((m) => {
-              // Relax constraints for fairness:
-              // - If room has only 1 member, allow consecutive (fairness > constraint)
-              // - Otherwise, respect no consecutive and no double assignment
-              if (roomMembers.length === 1) {
-                return !usedThisWeek.has(m.id); // Only check no double assignment
-              }
-              // For multi-member rooms, respect both constraints
-              if (m.id === lastUser) return false; // no consecutive weeks
-              if (usedThisWeek.has(m.id)) return false; // no double assignment same week
-              return true;
-            })
-            .sort((a, b) => (b.deficit || 0) - (a.deficit || 0)); // Highest deficit first
-
-          // If no eligible members with constraints, relax constraints for fairness
-          let chosenMember = eligibleMembers[0];
-
-          if (!chosenMember) {
-            // Relax constraints: allow consecutive if needed for fairness
-            const relaxedEligible = roomMembers
-              .filter((m) => !usedThisWeek.has(m.id)) // Only check no double assignment
-              .sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
-
-            chosenMember = relaxedEligible[0];
-          }
-
-          if (!chosenMember) {
-            setStatus(`❌ Could not find eligible member in ${r.name} even with relaxed constraints.`);
-            setLoading(false);
-            return;
-          }
-
-          usedThisWeek.add(chosenMember.id);
-
-          // Update member's deficit for this week's calculation
-          chosenMember.deficit = (chosenMember.deficit || 0) - 1;
-          chosenMember._assignmentCount = (chosenMember._assignmentCount || chosenMember.assignmentCount || 0) + 1;
-
-          const chore = shuffledChores[choreIndex++];
-          plannedAssignments.push({
-            choreId: chore.id,
-            roomId: r.id,
-            userId: chosenMember.id,
+      // Allocate each chore to the member with highest deficit
+      for (let i = 0; i < chores.length; i++) {
+        // Find eligible members (not used this week, not assigned last week if possible)
+        const eligibleMembers = allMembers
+          .filter((m) => {
+            if (usedThisWeek.has(m.id)) return false; // no double assignment same week
+            return true;
+          })
+          .sort((a, b) => {
+            // Sort by deficit (highest first), but prioritize members who weren't assigned last week
+            const aWasLastWeek = lastWeekMemberAssignments.has(a.id);
+            const bWasLastWeek = lastWeekMemberAssignments.has(b.id);
+            
+            // If one was assigned last week and the other wasn't, prefer the one who wasn't
+            if (aWasLastWeek && !bWasLastWeek) return 1;
+            if (!aWasLastWeek && bWasLastWeek) return -1;
+            
+            // Otherwise, sort by deficit (highest first)
+            return (b.deficit || 0) - (a.deficit || 0);
           });
+
+        // If no eligible members (shouldn't happen), try relaxing the "no consecutive" constraint
+        let chosenMember = eligibleMembers[0];
+
+        if (!chosenMember) {
+          // Relax constraints: allow consecutive if needed for fairness
+          const relaxedEligible = allMembers
+            .filter((m) => !usedThisWeek.has(m.id)) // Only check no double assignment
+            .sort((a, b) => (b.deficit || 0) - (a.deficit || 0));
+
+          chosenMember = relaxedEligible[0];
         }
+
+        if (!chosenMember) {
+          setStatus(`❌ Could not find eligible member even with relaxed constraints.`);
+          setLoading(false);
+          return;
+        }
+
+        usedThisWeek.add(chosenMember.id);
+
+        // Update member's deficit for this week's calculation
+        chosenMember.deficit = (chosenMember.deficit || 0) - 1;
+        chosenMember._assignmentCount = (chosenMember._assignmentCount || chosenMember.assignmentCount || 0) + 1;
+
+        const chore = shuffledChores[i];
+        plannedAssignments.push({
+          choreId: chore.id,
+          roomId: chosenMember.roomId, // Keep roomId for display/tracking
+          userId: chosenMember.id,
+        });
       }
 
-      if (plannedAssignments.length !== 12) {
-        setStatus(`❌ Expected 12 assignments, generated ${plannedAssignments.length}.`);
+      if (plannedAssignments.length !== 11) {
+        setStatus(`❌ Expected 11 assignments, generated ${plannedAssignments.length}.`);
         setLoading(false);
         return;
       }
 
       // ---------
-      // 3) Write to Firestore (week + assignments + update room deficits/pointers)
+      // 3) Write to Firestore (week + assignments + update member deficits)
       // ---------
       const batch = writeBatch(db);
 
       batch.set(weekRef, {
         weekId,
         createdAt: Date.now(),
-        totalChores: 12,
+        totalChores: 11,
       });
 
       plannedAssignments.forEach((a, idx) => {
@@ -290,15 +250,6 @@ export default function DirectorPage() {
           createdAt: Date.now(),
         });
       });
-
-      // Update rooms with new deficit
-      for (const r of rooms) {
-        batch.set(
-          doc(db, "houses", HOUSE_ID, "rooms", r.id),
-          { deficit: r.deficit || 0 },
-          { merge: true }
-        );
-      }
 
       // Update members with new assignment counts and deficits
       for (const m of members) {
