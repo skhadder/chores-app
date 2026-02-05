@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
+import { getAuth, Auth } from "firebase/auth";
 
 // Helper to check if we're in a build environment
 const isBuildTime = typeof window === "undefined" && process.env.NEXT_PHASE === "phase-production-build";
@@ -80,3 +81,4 @@ try {
 }
 
 export const db: Firestore = getFirestore(app);
+export const auth: Auth = getAuth(app);
