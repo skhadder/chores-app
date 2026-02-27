@@ -10,8 +10,19 @@ export function isEmailAllowed(email: string | null): boolean {
 
 export async function signInWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  // Add custom parameters to ensure proper authentication flow
+  provider.setCustomParameters({
+    prompt: "select_account",
+  });
+  
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error: any) {
+    // Re-throw with more context
+    console.error("Firebase auth error:", error);
+    throw error;
+  }
 }
 
 export async function signOutUser(): Promise<void> {

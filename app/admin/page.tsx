@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { db } from "@/lib/firebase";
-import { doc, setDoc, collection, getDocs, writeBatch, getDoc } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs, writeBatch, getDoc, deleteDoc } from "firebase/firestore";
 
 import { HOUSE_ID, ENVIRONMENT } from "@/lib/config";
 
@@ -30,14 +30,14 @@ const ROOMS_DATA = [
   { num: 6, capacity: 2, members: ["Fran S", "Kaitlyn N"] },
   { num: 7, capacity: 2, members: ["Isabella P"] }, // Senior removed: Annika S
   { num: 8, capacity: 1, members: ["Julissa P"] },
-  { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Laura M"] },
+  { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Laura M", "Andrea D"] },
   { num: 10, capacity: 4, members: ["Keira S", "Ava C", "Avary S", "Cadence R"] },
   { num: 11, capacity: 4, members: ["Summer B", "Sarah K", "Ariana M"] }, // Senior removed: Sam L
   { num: 12, capacity: 2, members: [] }, // Seniors removed: Grace C, Lauren L
   { num: 13, capacity: 2, members: [] }, // Seniors removed: Isabel W, Julia P
   { num: 14, capacity: 2, members: ["Mia H", "Cami K"] },
   { num: 15, capacity: 2, members: ["Brooke G", "Eve O"] },
-  { num: 16, capacity: 2, members: ["Isabella A", "Hannah M"] },
+  { num: 16, capacity: 2, members: ["Hannah M"] }, // Isabella A moved out
   { num: 17, capacity: 2, members: [] }, // Seniors removed: Lindsay G, Olivia G
   { num: 18, capacity: 8, members: ["Mikayla P", "Zoe Q", "Isela V", "Sanaa K", "Saavya S", "Josie Z", "Katie W", "Carina D"] },
 ];
@@ -131,6 +131,85 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       setStatus("❌ Error seeding rooms + members. Check console.");
+    }
+  };
+
+  // Update members only - preserves assignmentCount and deficit for existing members.
+  // Use this when residents change mid-semester (add new, remove moved-out) without resetting fairness tracking.
+  const updateMembers = async () => {
+    setStatus("Updating members...");
+    try {
+      const [membersSnap, assignmentsSnap] = await Promise.all([
+        getDocs(collection(db, "houses", HOUSE_ID, "members")),
+        getDocs(collection(db, "houses", HOUSE_ID, "assignments")),
+      ]);
+
+      const existingMembers = new Map(membersSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as any]));
+      const totalAssignmentsSoFar = assignmentsSnap.docs.filter((d) => (d.data() as any).weekId).length;
+      const newTotalOccupancy = ROOMS_DATA.reduce((sum, r) => sum + r.members.length, 0);
+
+      if (newTotalOccupancy <= 0) {
+        setStatus("❌ No members in ROOMS_DATA.");
+        return;
+      }
+
+      const expectedForNewMember = totalAssignmentsSoFar / newTotalOccupancy;
+      const batch = writeBatch(db);
+      const newMemberIds = new Set<string>();
+
+      for (const room of ROOMS_DATA) {
+        const roomId = `room_${String(room.num).padStart(2, "0")}`;
+        const memberIds: string[] = [];
+
+        for (const fullName of room.members) {
+          const memberId = `member_${slugify(fullName)}`;
+          memberIds.push(memberId);
+          newMemberIds.add(memberId);
+
+          const existing = existingMembers.get(memberId);
+          if (existing) {
+            // Preserve assignmentCount and deficit - only update name/roomId if changed
+            batch.set(
+              doc(db, "houses", HOUSE_ID, "members", memberId),
+              { name: fullName, roomId },
+              { merge: true }
+            );
+          } else {
+            // New member - add with assignmentCount: 0, deficit = expected (prioritized for fairness)
+            batch.set(doc(db, "houses", HOUSE_ID, "members", memberId), {
+              name: fullName,
+              roomId,
+              assignmentCount: 0,
+              deficit: expectedForNewMember,
+              createdAt: Date.now(),
+            });
+          }
+        }
+
+        batch.set(
+          doc(db, "houses", HOUSE_ID, "rooms", roomId),
+          {
+            name: `Room ${room.num}`,
+            capacity: room.capacity,
+            occupancy: room.members.length,
+            rotationOrder: memberIds,
+          },
+          { merge: true }
+        );
+      }
+
+      // Remove members no longer in ROOMS_DATA
+      for (const [memberId] of existingMembers) {
+        if (!newMemberIds.has(memberId)) {
+          batch.delete(doc(db, "houses", HOUSE_ID, "members", memberId));
+        }
+      }
+
+      await batch.commit();
+      setStatus("✅ Members updated! Assignment history preserved.");
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Error updating members. Check console.");
     }
   };
 
@@ -363,12 +442,16 @@ export default function AdminPage() {
     <main style={{ padding: 32 }}>
       <h1>Admin – Chore Generator</h1>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+      <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
         <button onClick={seedChores}>Seed chores</button>
         <button onClick={checkChores}>Check chores</button>
         <button onClick={seedRoomsAndMembers}>Seed rooms + members</button>
+        <button onClick={updateMembers}>Update members</button>
         <button onClick={generateWeek}>Generate week</button>
       </div>
+      <p style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+        Use &quot;Update members&quot; when residents change mid-semester — preserves fairness tracking. Use &quot;Seed rooms + members&quot; only for a fresh start (resets everything).
+      </p>
 
       <p style={{ marginTop: 16 }}>{status}</p>
       {generatedText && (
