@@ -30,7 +30,7 @@ const ROOMS_DATA = [
   { num: 6, capacity: 2, members: ["Fran S", "Kaitlyn N"] },
   { num: 7, capacity: 2, members: ["Isabella P"] }, // Senior removed: Annika S
   { num: 8, capacity: 1, members: ["Julissa P"] },
-  { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Laura M", "Andrea D"] },
+  { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Andrea D"] },
   { num: 10, capacity: 4, members: ["Keira S", "Ava C", "Avary S", "Cadence R"] },
   { num: 11, capacity: 4, members: ["Summer B", "Sarah K", "Ariana M"] }, // Senior removed: Sam L
   { num: 12, capacity: 2, members: [] }, // Seniors removed: Grace C, Lauren L
