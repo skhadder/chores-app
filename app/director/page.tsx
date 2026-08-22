@@ -21,7 +21,7 @@ function getWeekId(d = new Date()) {
 }
 
 export default function DirectorPage() {
-  const [assignments, setAssignments] = useState<Array<{ roomName: string; memberName: string; choreName: string }>>([]);
+  const [assignments, setAssignments] = useState<Array<{ memberName: string; choreName: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [currentWeekId, setCurrentWeekId] = useState<string | null>(null);
@@ -49,8 +49,8 @@ export default function DirectorPage() {
     return () => unsubscribe();
   }, []);
 
-  // Load assignments for a given weekId and join with rooms/members/chores
-  const loadWeekAssignments = async (weekId: string): Promise<Array<{ roomName: string; memberName: string; choreName: string }>> => {
+  // Load assignments for a given weekId and join with members/chores
+  const loadWeekAssignments = async (weekId: string): Promise<Array<{ memberName: string; choreName: string }>> => {
     try {
       // Fetch assignments for this week
       const assignmentsQuery = query(
@@ -60,20 +60,17 @@ export default function DirectorPage() {
       const assignmentsSnap = await getDocs(assignmentsQuery);
       const assignmentsData = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
-      // Fetch all rooms, members, and chores to create lookup maps
-      const [roomsSnap, membersSnap, choresSnap] = await Promise.all([
-        getDocs(collection(db, "houses", HOUSE_ID, "rooms")),
+      // Fetch members and chores to create lookup maps
+      const [membersSnap, choresSnap] = await Promise.all([
         getDocs(collection(db, "houses", HOUSE_ID, "members")),
         getDocs(collection(db, "houses", HOUSE_ID, "chores")),
       ]);
 
-      const roomMap = new Map(roomsSnap.docs.map((d) => [d.id, d.data().name as string]));
       const memberMap = new Map(membersSnap.docs.map((d) => [d.id, d.data().name as string]));
       const choreMap = new Map(choresSnap.docs.map((d) => [d.id, d.data().name as string]));
 
       // Join the data
       const joinedAssignments = assignmentsData.map((assignment) => ({
-        roomName: roomMap.get(assignment.roomId) || assignment.roomId,
         memberName: memberMap.get(assignment.userId) || assignment.userId,
         choreName: choreMap.get(assignment.choreId) || assignment.choreId,
       }));
@@ -316,7 +313,7 @@ export default function DirectorPage() {
     if (assignments.length === 0) return;
 
     // CSV header
-    const header = "Room,Member,Chore\n";
+    const header = "Member,Chore\n";
 
     // CSV rows with proper escaping
     const rows = assignments.map((assignment) => {
@@ -328,7 +325,7 @@ export default function DirectorPage() {
         return value;
       };
 
-      return `${escapeCSV(assignment.roomName)},${escapeCSV(assignment.memberName)},${escapeCSV(assignment.choreName)}`;
+      return `${escapeCSV(assignment.memberName)},${escapeCSV(assignment.choreName)}`;
     });
 
     const csvContent = header + rows.join("\n");
@@ -383,14 +380,13 @@ export default function DirectorPage() {
 
       // Prepare table data
       const tableData = assignments.map((assignment) => [
-        assignment.roomName,
         assignment.memberName,
         assignment.choreName,
       ]);
 
       // Generate table using autoTable function
       autoTable(doc, {
-        head: [["Room", "Member", "Chore"]],
+        head: [["Member", "Chore"]],
         body: tableData,
         startY: 35,
         styles: {
@@ -406,9 +402,8 @@ export default function DirectorPage() {
           fillColor: [255, 255, 255],
         },
         columnStyles: {
-          0: { cellWidth: 60 }, // Room column
-          1: { cellWidth: 60 }, // Member column
-          2: { cellWidth: "auto" }, // Chore column (takes remaining space)
+          0: { cellWidth: 60 }, // Member column
+          1: { cellWidth: "auto" }, // Chore column (takes remaining space)
         },
         margin: { top: 35, right: 14, bottom: 20, left: 14 },
       });
@@ -682,9 +677,6 @@ export default function DirectorPage() {
                 <thead>
                   <tr className="bg-muted border-b border-border">
                     <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                      Room
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                       Member
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
@@ -698,9 +690,6 @@ export default function DirectorPage() {
                       key={index}
                       className="border-b border-border last:border-b-0 hover:bg-muted/50 transition-colors"
                     >
-                      <td className="px-6 py-4 text-sm text-card-foreground">
-                        {assignment.roomName}
-                      </td>
                       <td className="px-6 py-4 text-sm text-card-foreground">
                         {assignment.memberName}
                       </td>
