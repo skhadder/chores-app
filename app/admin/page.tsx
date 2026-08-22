@@ -21,25 +21,70 @@ const CHORES = [
   { id: "chore_11", name: "Wipe down tables in dining room" },
 ];
 
+// Rooms are kept for schema compatibility; assignment is member-level so placement is irrelevant.
+const ALL_MEMBERS = [
+  "Abby C",
+  "Addison C",
+  "Ainsley P",
+  "Amelia N",
+  "Andrea D",
+  "Ariana M",
+  "Ava C",
+  "Ava P",
+  "Cami K",
+  "Carina D",
+  "Cassidy W",
+  "Danielle O",
+  "Diana G",
+  "Hailey L",
+  "Haleigh H",
+  "Haly D",
+  "Hannah M",
+  "Isela V",
+  "Jessica A",
+  "Josie Z",
+  "Julissa P",
+  "Kadyn C",
+  "Kati M",
+  "Katie W",
+  "Laura C",
+  "Lucy S",
+  "Alyssa G",
+  "Marissa P",
+  "Maya C",
+  "Mikayla P",
+  "Mina S",
+  "Olivia B",
+  "Saavya S",
+  "Sarah O",
+  "Summer B",
+  "Summer L",
+  "Terra K",
+  "Tessa O",
+  "Yamara T",
+  "Zara P",
+  "Zoe Q",
+];
+
 const ROOMS_DATA = [
-  { num: 1, capacity: 2, members: [] }, // Seniors removed: Sammy S, Isabella L
-  { num: 2, capacity: 2, members: ["Katia A", "Sofia C"] },
-  { num: 3, capacity: 4, members: ["Ainsley P", "Chandhana P", "Alyssa G", "Amelia N"] },
-  { num: 4, capacity: 4, members: ["Summer L", "Kat G", "Terra K", "Olivia R"] },
-  { num: 5, capacity: 1, members: [] }, // Senior removed: Penelope S
-  { num: 6, capacity: 2, members: ["Fran S", "Kaitlyn N"] },
-  { num: 7, capacity: 2, members: ["Isabella P"] }, // Senior removed: Annika S
-  { num: 8, capacity: 1, members: ["Julissa P"] },
-  { num: 9, capacity: 6, members: ["Elizabeth D", "Kaylee S", "Tyra K", "Zariana A", "Andrea D"] },
-  { num: 10, capacity: 4, members: ["Keira S", "Ava C", "Avary S", "Cadence R"] },
-  { num: 11, capacity: 4, members: ["Summer B", "Sarah K", "Ariana M"] }, // Senior removed: Sam L
-  { num: 12, capacity: 2, members: [] }, // Seniors removed: Grace C, Lauren L
-  { num: 13, capacity: 2, members: [] }, // Seniors removed: Isabel W, Julia P
-  { num: 14, capacity: 2, members: ["Mia H", "Cami K"] },
-  { num: 15, capacity: 2, members: ["Brooke G", "Eve O"] },
-  { num: 16, capacity: 2, members: ["Hannah M"] }, // Isabella A moved out
-  { num: 17, capacity: 2, members: [] }, // Seniors removed: Lindsay G, Olivia G
-  { num: 18, capacity: 8, members: ["Mikayla P", "Zoe Q", "Isela V", "Sanaa K", "Saavya S", "Josie Z", "Katie W", "Carina D"] },
+  { num: 1, capacity: ALL_MEMBERS.length, members: ALL_MEMBERS },
+  { num: 2, capacity: 2, members: [] },
+  { num: 3, capacity: 4, members: [] },
+  { num: 4, capacity: 4, members: [] },
+  { num: 5, capacity: 1, members: [] },
+  { num: 6, capacity: 2, members: [] },
+  { num: 7, capacity: 2, members: [] },
+  { num: 8, capacity: 1, members: [] },
+  { num: 9, capacity: 6, members: [] },
+  { num: 10, capacity: 4, members: [] },
+  { num: 11, capacity: 4, members: [] },
+  { num: 12, capacity: 2, members: [] },
+  { num: 13, capacity: 2, members: [] },
+  { num: 14, capacity: 2, members: [] },
+  { num: 15, capacity: 2, members: [] },
+  { num: 16, capacity: 2, members: [] },
+  { num: 17, capacity: 2, members: [] },
+  { num: 18, capacity: 8, members: [] },
 ];
 
 //top-level helper functions
