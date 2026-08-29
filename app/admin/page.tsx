@@ -9,14 +9,14 @@ import { HOUSE_ID, ENVIRONMENT } from "@/lib/config";
 
 const CHORES = [
   { id: "chore_01", name: "Clean up Teacup room, Chapter Room, Date Room and take out Courtyard trash" },
-  { id: "chore_02", name: "Empty Blue Girl Bathroom trash by 8 girl, check on toilet paper, and restock paper towels" },
+  { id: "chore_02", name: "Empty 8 girl bathroom trash, check on toilet paper, and restock paper towels" },
   { id: "chore_03", name: "Clean fridges and take out mini kitchen trash" },
   { id: "chore_04", name: "Empty TWO dining room trashes #1" },
   { id: "chore_05", name: "Empty TWO dining room trashes #2" },
   { id: "chore_06", name: "Empty Single Girl bathroom trash, check on toilet paper, and restock paper towels" },
-  { id: "chore_07", name: "Empty Pink Girl bathroom trash, check on toilet paper, and restock paper towels" },
+  { id: "chore_07", name: "Empty sun porch bathroom trash, check on toilet paper, and restock paper towels" },
   { id: "chore_08", name: "Clean Study Room and take out trash by 8 girl" },
-  { id: "chore_09", name: "Empty Yellow Girl bathroom trash, check on toilet paper, and restock paper towels" },
+  { id: "chore_09", name: "Empty hallway bathroom trash, check on toilet paper, and restock paper towels" },
   { id: "chore_10", name: "Sort mail" },
   { id: "chore_11", name: "Wipe down tables in dining room" },
 ];
